@@ -1,0 +1,132 @@
+#!/bin/bash
+
+#此脚本为ceph部署准备环境，服务于ceph_deploy脚本
+
+#此脚本在node1上运行
+
+#data_ceph.conf
+#len=`cat data_ceph.conf | wc -l`
+
+IPS=`awk '{print $1}' data_ceph.conf`
+PASSWORD=1
+
+#引用key_match脚本实现密钥配对
+source ./key_match
+
+#################################################################
+#所有主机密钥配对，yum统一，DNS统一等基本配置
+#################################################################
+base_config (){
+
+#密钥配对
+ssh_copy_id_to_all $PASSWORD
+
+#配置ceph专用yum源
+cat > /etc/yum.repos.d/ceph.repo << EOF
+[mon]
+name=mon
+baseurl=ftp://192.168.4.254/ceph/rhceph-2.0-rhel-7-x86_64/MON
+gpgcheck=0
+[osd]
+name=osd
+baseurl=ftp://192.168.4.254/ceph/rhceph-2.0-rhel-7-x86_64/OSD
+gpgcheck=0
+[tools]
+name=tools
+baseurl=ftp://192.168.4.254/ceph/rhceph-2.0-rhel-7-x86_64/Tools
+gpgcheck=0
+
+EOF
+
+
+#配置/etc/hosts
+cat > /etc/hosts << EOF
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+
+192.168.4.10     client
+192.168.4.11     node1
+192.168.4.12     node2
+192.168.4.13     node3
+EOF
+
+for ip in $IPS
+do
+	#DNS统一
+	scp /etc/hosts  $ip:/etc/ 
+	#ceph专用yum统一
+	scp /etc/yum.repos.d/ceph.repo  $ip:/etc/yum.repos.d/
+done
+
+}
+
+#################################################################
+#真机创建NTP时间同步服务器，同时更改配置文件
+#################################################################
+time_sync_team (){
+
+rpm -q expect || yum -y install expect
+
+expect << EOF
+spawn ssh -o StrictHostKeyChecking=no  192.168.4.254                             
+expect "password:" { send "Taren1\r" }           
+expect "#"	   { send "rm -rf /etc/chrony.conf\r" }           
+expect "#"         { send "yum -y reinstall chrony\r" }
+expect "#"	   { send { sed -r -i 's/(^server [1-9])(.*)/#\1\2/' /etc/chrony.conf } }
+expect "#"	   { send "\r" }
+expect "#"	   { send { sed -i '26a allow 192.168.4.0/24'  /etc/chrony.conf } }
+expect "#"	   { send "\r" }
+expect "#"	   { send { sed -i '30a local stratum 10'  /etc/chrony.conf } }
+expect "#"	   { send "\r" }
+expect "#"         { send "iptables -F\r" }           
+expect "#"         { send "systemctl restart chronyd\r" }
+expect "#"         { send "exit\r" }           
+expect eof
+EOF
+
+}
+
+#################################################################
+#被同步时间的服务器配置
+#################################################################
+time_sync_team_slave (){
+
+#在本地将配置文件修改好，批量远程发送
+#sed -r -i 's/(^server [0-9])(.*)/#\1\2/' /etc/chrony.conf
+#sed -i '2a server 192.168.4.254 iburst'  /etc/chrony.conf
+
+#判断expect包是否安装
+rpm -q expect || yum -y install expect
+
+#给每台被同步时间的服务器起时间服务
+for ip in $IPS
+do
+expect << EOF
+spawn ssh $ip
+expect "#"  { send "rm -rf /etc/chrony.conf\r" }
+expect "#"  { send "yum -y reinstall chrony\r" }
+expect "#"  { send { sed -r -i 's/(^server [0-9])(.*)/#\1\2/' /etc/chrony.conf } }
+expect "#"  { send "\r" }
+expect "#"  { send { sed -i '2a server 192.168.4.254 iburst'  /etc/chrony.conf } }
+expect "#"  { send "\r" }
+expect "#"  { send "systemctl restart chronyd\r" }
+expect "#"  { send "iptables -F\r" }
+expect "#"  { send "exit\r" }
+expect eof
+EOF
+done
+
+}
+
+#################################################################
+#环境准备
+#################################################################
+envir_ready (){
+
+base_config
+time_sync_team
+time_sync_team_slave
+
+}
+
+envir_ready

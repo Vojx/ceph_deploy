@@ -1,0 +1,15 @@
+#!/bin/bash
+aa=`sed -i '$a allow 192.168.4.0/24\nlocal stratum 10' /etc/chrony.conf`
+bb=`sed -r -i 's/(^server [1-9])(.*)/#\1\2/' /etc/chrony.conf`
+expect << EOF
+spawn ssh -o StrictHostKeyChecking=no  192.168.4.254                             
+expect "password:" { send "Taren1\r" }           
+expect "#"         { send "rm -rf /etc/chrony.conf\r" }           
+expect "#"         { send "yum -y reinstall chrony\r" }
+expect "#"         { send "$aa\r" }
+expect "#"         { send "$bb\r" }
+expect "#"         { send "iptables -F\r" }           
+expect "#"         { send "exit\r" }           
+expect eof
+EOF
+

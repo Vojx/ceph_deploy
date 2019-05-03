@@ -1,5 +1,6 @@
 #!/bin/bash
 111111111111111111111111111
+22222222222222222222
 aaa=`sed -i '$a allow 192.168.4.0/24\nlocal stratum 10' /etc/chrony.conf`
 bb=`sed -r -i 's/(^server [1-9])(.*)/#\1\2/' /etc/chrony.conf`
 expect << EOF

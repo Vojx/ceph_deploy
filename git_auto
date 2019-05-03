@@ -3,7 +3,7 @@ git add *
 git commit  -m  "update"
 expect << EOF
 spawn git push -u origin master
-expect ":" { send "vojx\r"}
-expect ":" { send "silver147147\r"}
+expect "'https://github.com':" { send "vojx\r" }
+expect "'https://vojx@github.com':" { send "silver147147\r" }
 expect eof
 EOF

@@ -5,4 +5,5 @@ expect << EOF
 spawn git push -u origin master
 expect ":" { send "vojx\r"}
 expect ":" { send "silver147147\r"}
+expect eof
 EOF
